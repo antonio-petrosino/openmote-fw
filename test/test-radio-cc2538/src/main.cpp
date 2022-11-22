@@ -12,30 +12,32 @@
 /*================================ include ==================================*/
 
 #include <string.h>
-
+#include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
 
-#include "board.h"
+#include <BoardImplementation.hpp>
 
-#include "Callback.h"
-#include "Scheduler.h"
-#include "Semaphore.h"
-#include "Serial.h"
-#include "Task.h"
+#include "Callback.hpp"
+#include "Scheduler.hpp"
+#include "Semaphore.hpp"
+#include "Serial.hpp"
+#include "Task.hpp"
 
 /*================================ define ===================================*/
 
 #define RADIO_MODE_RX                       ( 0 )
 #define RADIO_MODE_TX                       ( 1 )
-#define RADIO_MODE                          ( RADIO_MODE_TX )
+#define RADIO_MODE                          ( RADIO_MODE_RX )
 #define RADIO_CHANNEL                       ( 26 )
 
 #define PAYLOAD_LENGTH                      ( 125 )
 #define EUI48_LENGTH                        ( 6 )
 
 #define UART_BAUDRATE                       ( 115200 )
+#define SPI_BAUDRATE (8000000)
+#define SERIAL_BUFFER_LENGTH (1024)
 
 #define GREEN_LED_TASK_PRIORITY             ( tskIDLE_PRIORITY + 2 )
 #define RADIO_RX_TASK_PRIORITY              ( tskIDLE_PRIORITY + 0 )
@@ -71,10 +73,13 @@ static uint8_t* radio_ptr = radio_buffer;
 static uint8_t  radio_len = sizeof(radio_buffer);
 static int8_t rssi;
 static uint8_t lqi;
-static uint8_t crc;
+static bool crc;
 
-static Serial serial(uart);
+static uint8_t uartBuffer[1024];
+static uint8_t serial_buffer[SERIAL_BUFFER_LENGTH];
+//static Serial serial(uart);
 
+static Serial serial(uart0);
 /*================================= public ==================================*/
 
 int main (void)
@@ -94,7 +99,13 @@ int main (void)
 
 #if (RADIO_MODE == RADIO_MODE_RX)
     // Enable the UART driver
-    uart.enable(UART_BAUDRATE);
+    uart0.enable(UART_BAUDRATE);
+    /* Enable the SPI interface */
+    spi0.enable(SPI_BAUDRATE);
+    /* Initialize Serial interface */
+    serial.init();
+    /* Initialize the DMA */
+    dma.init();
 
     // Create the radio receive task
     xTaskCreate(prvRadioRxTask, (const char *) "RadioRx", 128, NULL, RADIO_RX_TASK_PRIORITY, NULL);
@@ -127,7 +138,7 @@ static void prvGreenLedTask(void *pvParameters)
 static void prvRadioRxTask(void *pvParameters)
 {
     static RadioResult result;
-
+    size_t len = 0;
     // Forever
     while(true)
     {
@@ -143,20 +154,53 @@ static void prvRadioRxTask(void *pvParameters)
         // Take the rxSemaphre, block until available
         if (rxSemaphore.take())
         {
-            // Turn the yellow LED off when a packet is received
-            led_yellow.off();
-
             // Get a packet from the radio buffer
             radio_ptr = radio_buffer;
             radio_len = sizeof(radio_buffer);
             result = radio.getPacket(radio_ptr, &radio_len, &rssi, &lqi, &crc);
 
-            if (result == RadioResult_Success && crc)
+            len = sprintf((char*) uartBuffer, "Read...\r\n:%s \r\n", radio_ptr );
+			if (result == RadioResult_Success && crc)
             {
-            	uart.writeByte(rssi);
-                uart.writeByte(crc >> 7);
+            	//uart0.writeByte(rssi);
+				//uart0.writeByte(radio_len);
+				//uart0.writeByte(lqi);
+                //uart0.writeByte(crc >> 7);
+				if (len > 0)
+				{
+				uart0.writeBytes(uartBuffer, len);
+				//len = 0;
+				}				
             }
+
+            /* Prepare serial buffer */        
+            /* Copy radio packet payload */
+            //dma.memcpy(buffer_ptr, packet_ptr, packet_length);
+            dma.memcpy(serial_buffer, uartBuffer, len);
+            /* Update buffer length */
+            //len = 0;
+            //len = packet_length;
             
+            /* Copy RSSI value */
+            serial_buffer[len++] = lqi;
+            // Signaling byte
+            serial_buffer[len++] = 105;
+
+            //len = prepare_serial(serial_buffer, packet_ptr, packet_len, lqi);
+
+            /* Send packet via Serial */
+            serial.write(serial_buffer, len, true);
+
+            len = 0;
+            
+            //if (result == RadioResult_Success && crc)
+            //{
+            //	uart0.writeByte(rssi);
+            //    uart0.writeByte(crc >> 7);
+            //}
+
+            // Turn the yellow LED off when a packet is received
+            led_yellow.off();
             // Turn off the radio until the next packet
             radio.off();
         }
