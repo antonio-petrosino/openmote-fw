@@ -11,7 +11,11 @@
 
 /*================================ include ==================================*/
 
-#include <string.h>
+#include <string>
+//#include <iostream>
+
+#include <vector>
+
 #include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
@@ -27,21 +31,21 @@
 
 /*================================ define ===================================*/
 
-#define RADIO_MODE_RX                       ( 0 )
-#define RADIO_MODE_TX                       ( 1 )
-#define RADIO_MODE                          ( RADIO_MODE_RX )
-#define RADIO_CHANNEL                       ( 26 )
+#define RADIO_MODE_RX (0)
+#define RADIO_MODE_TX (1)
+#define RADIO_MODE (RADIO_MODE_RX)
+#define RADIO_CHANNEL (26)
 
-#define PAYLOAD_LENGTH                      ( 125 )
-#define EUI48_LENGTH                        ( 6 )
+#define PAYLOAD_LENGTH (125)
+#define EUI48_LENGTH (6)
 
-#define UART_BAUDRATE                       ( 115200 )
+#define UART_BAUDRATE (115200)
 #define SPI_BAUDRATE (8000000)
 #define SERIAL_BUFFER_LENGTH (1024)
 
-#define GREEN_LED_TASK_PRIORITY             ( tskIDLE_PRIORITY + 2 )
-#define RADIO_RX_TASK_PRIORITY              ( tskIDLE_PRIORITY + 0 )
-#define RADIO_TX_TASK_PRIORITY              ( tskIDLE_PRIORITY + 0 )
+#define GREEN_LED_TASK_PRIORITY (tskIDLE_PRIORITY + 2)
+#define RADIO_RX_TASK_PRIORITY (tskIDLE_PRIORITY + 0)
+#define RADIO_TX_TASK_PRIORITY (tskIDLE_PRIORITY + 0)
 
 /*================================ typedef ==================================*/
 
@@ -69,20 +73,22 @@ static PlainCallback txInitCallback(&txInit);
 static PlainCallback txDoneCallback(&txDone);
 
 static uint8_t radio_buffer[PAYLOAD_LENGTH];
-static uint8_t* radio_ptr = radio_buffer;
-static uint8_t  radio_len = sizeof(radio_buffer);
+static uint8_t *radio_ptr = radio_buffer;
+static uint8_t radio_len = sizeof(radio_buffer);
 static int8_t rssi;
 static uint8_t lqi;
 static bool crc;
 
 static uint8_t uartBuffer[1024];
 static uint8_t serial_buffer[SERIAL_BUFFER_LENGTH];
-//static Serial serial(uart);
+
+static uint8_t rssi_buffer[SERIAL_BUFFER_LENGTH];
+// static Serial serial(uart);
 
 static Serial serial(uart0);
 /*================================= public ==================================*/
 
-int main (void)
+int main(void)
 {
     // Initialize board
     board.init();
@@ -95,7 +101,7 @@ int main (void)
     radio.setChannel(RADIO_CHANNEL);
 
     // Create the blink task
-    xTaskCreate(prvGreenLedTask, (const char *) "Green", 128, NULL, GREEN_LED_TASK_PRIORITY, NULL);
+    xTaskCreate(prvGreenLedTask, (const char *)"Green", 128, NULL, GREEN_LED_TASK_PRIORITY, NULL);
 
 #if (RADIO_MODE == RADIO_MODE_RX)
     // Enable the UART driver
@@ -108,10 +114,10 @@ int main (void)
     dma.init();
 
     // Create the radio receive task
-    xTaskCreate(prvRadioRxTask, (const char *) "RadioRx", 128, NULL, RADIO_RX_TASK_PRIORITY, NULL);
+    xTaskCreate(prvRadioRxTask, (const char *)"RadioRx", 128, NULL, RADIO_RX_TASK_PRIORITY, NULL);
 #elif (RADIO_MODE == RADIO_MODE_TX)
     // Create the radio transmit task
-    xTaskCreate(prvRadioTxTask, (const char *) "RadioTx", 128, NULL, RADIO_TX_TASK_PRIORITY, NULL);
+    xTaskCreate(prvRadioTxTask, (const char *)"RadioTx", 128, NULL, RADIO_TX_TASK_PRIORITY, NULL);
 #endif
 
     // Start the scheduler
@@ -140,7 +146,7 @@ static void prvRadioRxTask(void *pvParameters)
     static RadioResult result;
     size_t len = 0;
     // Forever
-    while(true)
+    while (true)
     {
         // Turn on the radio transceiver
         radio.on();
@@ -159,45 +165,58 @@ static void prvRadioRxTask(void *pvParameters)
             radio_len = sizeof(radio_buffer);
             result = radio.getPacket(radio_ptr, &radio_len, &rssi, &lqi, &crc);
 
-            len = sprintf((char*) uartBuffer, "Read...\r\n:%s \r\n", radio_ptr );
-			if (result == RadioResult_Success && crc)
+            len = sprintf((char *)uartBuffer, "%s\r\n", radio_ptr);
+            if (result == RadioResult_Success && crc)
             {
-            	//uart0.writeByte(rssi);
-				//uart0.writeByte(radio_len);
-				//uart0.writeByte(lqi);
-                //uart0.writeByte(crc >> 7);
-				if (len > 0)
-				{
-				uart0.writeBytes(uartBuffer, len);
-				//len = 0;
-				}				
+                if (len > 0)
+                {
+                    // uart0.writeBytes(uartBuffer, len);
+
+                    /* Prepare serial buffer */
+                    /* Copy radio packet payload */
+                    // https://www.asciitable.it/
+                    uartBuffer[0] = 73;
+
+                    uartBuffer[len++] = 03;
+                    uartBuffer[len++] = 105;
+                    dma.memcpy(&serial_buffer[1], &uartBuffer[0], len);
+
+                    // serial_buffer[len++] = 105;
+
+                    /* Update buffer length */
+                    /* Copy RSSI value */
+                    // serial_buffer[len++] = lqi;
+                    //  Signaling byte
+                    // serial_buffer[len++] = 105;
+
+                    /* Send packet via Serial */
+                    serial.write(serial_buffer, len, true);
+
+                    // if (len > 0)
+                    //{
+                    // uart0.writeBytes(serial_buffer, len);
+                    //}
+
+
+                    /* Send packet via Serial */                                
+                    len = sprintf((char*) rssi_buffer, "RSSI:\t%d\t\r\n", rssi);
+                    serial.write(rssi_buffer, len, true);       
+                    len = 0;    
+
+                }
             }
 
-            /* Prepare serial buffer */        
-            /* Copy radio packet payload */
-            //dma.memcpy(buffer_ptr, packet_ptr, packet_length);
-            dma.memcpy(serial_buffer, uartBuffer, len);
-            /* Update buffer length */
-            //len = 0;
-            //len = packet_length;
-            
-            /* Copy RSSI value */
-            serial_buffer[len++] = lqi;
-            // Signaling byte
-            serial_buffer[len++] = 105;
-
-            //len = prepare_serial(serial_buffer, packet_ptr, packet_len, lqi);
-
-            /* Send packet via Serial */
-            serial.write(serial_buffer, len, true);
-
             len = 0;
-            
-            //if (result == RadioResult_Success && crc)
-            //{
-            //	uart0.writeByte(rssi);
-            //    uart0.writeByte(crc >> 7);
-            //}
+
+            /*             rssi_buffer[len++] = rssi;
+                        std::string s(rssi, sizeof(rssi));
+                        std::string s2;
+                        s2 = " :RSII";
+                        s = s.append(s2);
+                        std::vector<uint8_t> myVector(s.begin(), s.end());
+                        uint8_t *s_to_write = &myVector[0];
+                        serial.write(s_to_write, sizeof(s), true);
+                        len = 0; */
 
             // Turn the yellow LED off when a packet is received
             led_yellow.off();
@@ -215,7 +234,7 @@ static void prvRadioTxTask(void *pvParameters)
     board.getEUI48(radio_buffer);
 
     // Forever
-    while(true)
+    while (true)
     {
         // Take the txSemaphre, block until available
         if (txSemaphore.take())

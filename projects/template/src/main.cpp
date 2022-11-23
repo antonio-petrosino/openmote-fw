@@ -155,7 +155,7 @@ static void printSensor(void *pvParameters) {
       sensorData.pressure = (uint16_t) (bme280_data.pressure * 1.0f);
 
       led_green.on();
-      len = sprintf((char*) uartBuffer, "Temperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", sensorData.temperature, sensorData.humidity, sensorData.pressure);
+      len = sprintf((char*) uartBuffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 3, sensorData.temperature, sensorData.humidity, sensorData.pressure);
     }
 
     if (len > 0)
@@ -180,7 +180,7 @@ static void printSensor(void *pvParameters) {
         led_yellow.on();
 
         // Load the packet to the transmit buffer
-        len = sprintf((char*) radio_buffer, "Temperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", sensorData.temperature, sensorData.humidity, sensorData.pressure);
+        len = sprintf((char*) radio_buffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 3, sensorData.temperature, sensorData.humidity, sensorData.pressure);
         radio_ptr = radio_buffer;
         radio_len = sizeof(radio_buffer);
         radio_len = len;
@@ -206,7 +206,7 @@ static void printSensor(void *pvParameters) {
     
     led_green.off();
 
-    Scheduler::delay_ms(500);
+    Scheduler::delay_ms(1500);
   }
 }
 
