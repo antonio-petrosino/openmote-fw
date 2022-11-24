@@ -1,25 +1,30 @@
+/**
+ * @file       main.cpp
+ * @author     A. Petrosino - G. Sciddurlo
+ * @version    v0.01
+ * @date       Nov, 2022
+ * @brief
+ *
+ */
+
+/*================================ include ==================================*/
+
 #include <FreeRTOS.h>
 #include <task.h>
 #include <stdio.h>
-
 #include "Gpio.hpp"
 #include "I2c.hpp"
 #include "Spi.hpp"
-
 #include <BoardImplementation.hpp>
 #include <Callback.hpp>
-//#include <OneWire.hpp>
 #include <Scheduler.hpp>
 #include <Task.hpp>
 #include <platform_types.hpp>
-
-
 #include "bme280/Bme280.hpp"
-
-//#include "Serial.h"
 #include <string.h>
-
 #include "Semaphore.hpp"
+
+/*================================ define ===================================*/
 
 #define HEARTBEAT_TASK_PRIORITY		(tskIDLE_PRIORITY + 0)
 #define SENSOR_TASK_PRIORITY		(tskIDLE_PRIORITY + 2)
@@ -40,18 +45,21 @@
 #define UART_BAUDRATE                       ( 115200 )
 #define RADIO_CHANNEL                       ( 26 )
 
-
-extern "C" void vApplicationTickHook(void);
-extern "C" void vApplicationIdleHook(void);
-
-static void txInit(void);
-static void txDone(void);
+/*================================ typedef ==================================*/
 
 typedef struct {
   uint16_t temperature;
   uint16_t humidity;
   uint16_t pressure;
 } SensorData;
+
+/*=============================== prototypes ================================*/
+
+extern "C" void vApplicationTickHook(void);
+extern "C" void vApplicationIdleHook(void);
+
+static void txInit(void);
+static void txDone(void);
 
 static SemaphoreBinary rxSemaphore, txSemaphore;
 
@@ -63,8 +71,6 @@ static uint8_t* radio_ptr = radio_buffer;
 static uint8_t  radio_len = sizeof(radio_buffer);
 static int8_t rssi;
 static uint8_t lqi;
-
-//static Serial serial(uart0);
 
 static void heartbeat(void *pvParameters);
 static void printSensor(void *pvParameters);
@@ -155,7 +161,7 @@ static void printSensor(void *pvParameters) {
       sensorData.pressure = (uint16_t) (bme280_data.pressure * 1.0f);
 
       led_green.on();
-      len = sprintf((char*) uartBuffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 3, sensorData.temperature, sensorData.humidity, sensorData.pressure);
+      len = sprintf((char*) uartBuffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 1, sensorData.temperature, sensorData.humidity, sensorData.pressure);
     }
 
     if (len > 0)
@@ -164,10 +170,8 @@ static void printSensor(void *pvParameters) {
       uart0.writeBytes(uartBuffer, len);
       len = 0;
     }
-
     
-    led_green.on();
-    //bme280.reset();
+    led_green.on();    
     Scheduler::delay_ms(50);
 
     // Take the txSemaphre, block until available
@@ -180,7 +184,7 @@ static void printSensor(void *pvParameters) {
         led_yellow.on();
 
         // Load the packet to the transmit buffer
-        len = sprintf((char*) radio_buffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 3, sensorData.temperature, sensorData.humidity, sensorData.pressure);
+        len = sprintf((char*) radio_buffer, "ID\t%i\tTemperature\t%u\tHumidity\t%u\tPressure\t%u\t\r\n", 1, sensorData.temperature, sensorData.humidity, sensorData.pressure);
         radio_ptr = radio_buffer;
         radio_len = sizeof(radio_buffer);
         radio_len = len;
@@ -198,8 +202,7 @@ static void printSensor(void *pvParameters) {
             led_yellow.off();
         }
 
-        // Delay the transmission of the next packet 250 ms
-        //vTaskDelay(10 / portTICK_RATE_MS);
+        // Delay the transmission of the next packet 50 ms        
         Scheduler::delay_ms(50);
     }
 

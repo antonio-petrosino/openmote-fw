@@ -1,28 +1,21 @@
 /**
  * @file       main.cpp
- * @author     Pere Tuset-Peiro (peretuset@openmote.com)
- * @version    v0.1
- * @date       May, 2015
+ * @author     A. Petrosino - G. Sciddurlo
+ * @version    v0.01
+ * @date       Nov, 2022
  * @brief
  *
- * @copyright  Copyright 2015, OpenMote Technologies, S.L.
- *             This file is licensed under the GNU General Public License v2.
  */
 
 /*================================ include ==================================*/
 
 #include <string>
-//#include <iostream>
-
 #include <vector>
-
 #include <stdio.h>
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-
 #include <BoardImplementation.hpp>
-
 #include "Callback.hpp"
 #include "Scheduler.hpp"
 #include "Semaphore.hpp"
@@ -81,9 +74,7 @@ static bool crc;
 
 static uint8_t uartBuffer[1024];
 static uint8_t serial_buffer[SERIAL_BUFFER_LENGTH];
-
 static uint8_t rssi_buffer[SERIAL_BUFFER_LENGTH];
-// static Serial serial(uart);
 
 static Serial serial(uart0);
 /*================================= public ==================================*/
@@ -119,7 +110,6 @@ int main(void)
     // Create the radio transmit task
     xTaskCreate(prvRadioTxTask, (const char *)"RadioTx", 128, NULL, RADIO_TX_TASK_PRIORITY, NULL);
 #endif
-
     // Start the scheduler
     Scheduler::run();
 }
@@ -169,34 +159,17 @@ static void prvRadioRxTask(void *pvParameters)
             if (result == RadioResult_Success && crc)
             {
                 if (len > 0)
-                {
-                    // uart0.writeBytes(uartBuffer, len);
-
+                {                    
                     /* Prepare serial buffer */
                     /* Copy radio packet payload */
                     // https://www.asciitable.it/
                     uartBuffer[0] = 73;
-
                     uartBuffer[len++] = 03;
                     uartBuffer[len++] = 105;
                     dma.memcpy(&serial_buffer[1], &uartBuffer[0], len);
 
-                    // serial_buffer[len++] = 105;
-
-                    /* Update buffer length */
-                    /* Copy RSSI value */
-                    // serial_buffer[len++] = lqi;
-                    //  Signaling byte
-                    // serial_buffer[len++] = 105;
-
                     /* Send packet via Serial */
                     serial.write(serial_buffer, len, true);
-
-                    // if (len > 0)
-                    //{
-                    // uart0.writeBytes(serial_buffer, len);
-                    //}
-
 
                     /* Send packet via Serial */                                
                     len = sprintf((char*) rssi_buffer, "RSSI:\t%d\t\r\n", rssi);
@@ -207,17 +180,6 @@ static void prvRadioRxTask(void *pvParameters)
             }
 
             len = 0;
-
-            /*             rssi_buffer[len++] = rssi;
-                        std::string s(rssi, sizeof(rssi));
-                        std::string s2;
-                        s2 = " :RSII";
-                        s = s.append(s2);
-                        std::vector<uint8_t> myVector(s.begin(), s.end());
-                        uint8_t *s_to_write = &myVector[0];
-                        serial.write(s_to_write, sizeof(s), true);
-                        len = 0; */
-
             // Turn the yellow LED off when a packet is received
             led_yellow.off();
             // Turn off the radio until the next packet
